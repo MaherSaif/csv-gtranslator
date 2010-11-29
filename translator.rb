@@ -1,18 +1,27 @@
 require 'rubygems'
 require 'csv'
-#require 'ap'
 require 'httparty'
+#require 'ap'
 
-def import_csv(file)
-  CSV.foreach(file, :headers => true) do |row|
-    yield row
+class MyCSV
+  attr_accessor :data
+
+  def initialize(in_file, out_file = nil, options = {})
+    @in_file = in_file
+    @out_file = out_file || "data_out.csv"
+    @options = {:headers => true}.merge options
+    @data = []
   end
-end
 
-def export_csv(file, data)
-  CSV.open(file, 'wb') do |csv|
-    data.each do |row|
-      csv << row
+  def import
+    CSV.foreach @in_file, @options do |row|
+      yield row
+    end
+  end
+
+  def export
+    CSV.open @out_file, 'wb' do |csv|
+      @data.each { |row| csv << row }
     end
   end
 end
@@ -20,12 +29,14 @@ end
 
 class Translator
   include HTTParty
-  default_params :source => "en", :target => "ar", :key => "AIzaSyBZqoFfZUVLlMs7--YWOEJR_ylC8gCNtDM"
+  default_params :source => "en", :target => "ar",
+                 :key => "AIzaSyBZqoFfZUVLlMs7--YWOEJR_ylC8gCNtDM"
   format :json
 
 
   def self.t(keyword)
-    result = get("https://www.googleapis.com/language/translate/v2", :query => {:q => keyword})
+    result = get("https://www.googleapis.com/language/translate/v2",
+                 :query => {:q => keyword})
     result["data"]["translations"][0]["translatedText"]
   end
 end
@@ -38,22 +49,21 @@ end
 # $ ruby translator.rb INPUT_FILE [OUTPUT_FILE]
 ##############################
 
-# get csv file
+# csv file
 file_in = ARGV.shift
 if file_in.nil?
   puts "#{$0}: INPUT_FILE [OUTPUT_FILE]"
   exit 1
 end
 
-file_out = ARGV.shift || "data_out.csv"
-data = []  # data to write
+mycsv = MyCSV.new file_in, ARGV.shift
+puts mycsv.inspect
 
-import_csv(file_in) do |row|
-#  row["value"] = Translator.t(row["value"]).gsub /(.*)/, '"\0'
+mycsv.import do |row|
   puts row["value"]
   row["value"] = Translator.t(row["value"])
 
-  data << row
+  mycsv.data << row
 end
 
-export_csv(file_out, data)
+mycsv.export
